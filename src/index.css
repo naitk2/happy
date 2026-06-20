@@ -1,40 +1,76 @@
 @import "tailwindcss";
 
-@theme {
-  --font-sans: "Inter", "Roboto", "Outfit", sans-serif;
+@layer base {
+  body {
+    background-color: #000000;
+    color: #ffffff;
+    font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
 }
 
-@layer utilities {
-  .custom-scrollbar::-webkit-scrollbar {
-    width: 6px;
-  }
-  
-  .custom-scrollbar::-webkit-scrollbar-track {
-    background: rgba(13, 17, 23, 0.5);
-    border-radius: 4px;
-  }
-  
-  .custom-scrollbar::-webkit-scrollbar-thumb {
-    background: rgba(139, 148, 158, 0.2);
-    border-radius: 4px;
-  }
+/* Custom platform utility scrollbars optimized for dashboard lists */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
 
-  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-    background: rgba(139, 148, 158, 0.4);
-  }
+::-webkit-scrollbar-track {
+  background: #000000;
+  border-radius: 0px;
+}
 
-  .animate-fade-in {
-    animation: fadeIn 0.3s ease-out forwards;
-  }
+::-webkit-scrollbar-thumb {
+  background: #1F2937;
+  border-radius: 9999px;
+  border: 1px solid #000000;
+}
 
-  @keyframes fadeIn {
-    from {
-      opacity: 0;
-      transform: translateY(10px);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
+::-webkit-scrollbar-thumb:hover {
+  background: #00FFCC;
+}
+
+/* Core execution grid hover glow states */
+.glow-on-hover:hover {
+  box-shadow: 0 0 20px rgba(0, 255, 204, 0.15);
+  border-color: rgba(0, 255, 204, 0.4);
+}
+
+/* Ensure smooth native interactive transforms across elements */
+input, select, textarea, button {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Custom radar heartbeat frame sequences */
+@keyframes pulseGlow {
+  0%, 100% {
+    opacity: 1;
+    transform: scale(1);
+    box-shadow: 0 0 8px #00FFCC;
+  }
+  50% {
+    opacity: 0.4;
+    transform: scale(0.9);
+    box-shadow: 0 0 2px #00FFCC;
+  }
+}
+
+.radar-pulse-active {
+  animation: pulseGlow 2s infinite ease-in-out;
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.3s ease-out forwards;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
   }
 }
