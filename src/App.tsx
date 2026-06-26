@@ -801,10 +801,7 @@ export default function App() {
               <span className="text-[10px] text-gray-500 uppercase tracking-widest font-bold">Identity Node</span>
               <span className="text-3xl text-white font-black tracking-widest uppercase text-[#00FFCC]">Naitik Patil</span>
             </div>
-            <div className="flex flex-col gap-1 relative z-10">
-              <span className="text-[10px] text-gray-500 uppercase tracking-widest font-bold">System Uptime (Age)</span>
-              <span className="text-sm text-gray-300 font-mono">15 Years Old</span>
-            </div>
+
 
             <div className="flex flex-col gap-1 relative z-10 mt-2 border-t border-gray-800 pt-5">
               <span className="text-[10px] text-gray-500 uppercase tracking-widest font-bold">Secure Comms Links</span>
@@ -876,7 +873,7 @@ export default function App() {
       <div className="mt-auto border-t border-gray-900 pt-5 flex items-center gap-3">
         <Activity className="h-5 w-5 text-[#00FFCC] animate-pulse" />
         <span className="text-[10px] text-gray-500 font-mono tracking-widest uppercase border border-gray-800 bg-[#0B0F17] px-3 py-1.5 rounded-md">
-          [SYSTEM NODE ADVISORY]: 15-year-old developer node synchronized with Goan tech ecosystem clusters.
+          [SYSTEM NODE ADVISORY]: Developer node synchronized with Goan tech ecosystem clusters.
         </span>
       </div>
     </div>
