@@ -1,5 +1,5 @@
-import React, { useState, useEffect, FormEvent, useRef } from 'react';
-import { Activity, Flame, Cpu, Zap, PlusCircle, CheckCircle2, User, ShieldAlert, Lock, Mail, ExternalLink, X, Layers, Image as ImageIcon, Briefcase, Calendar, MapPin, Code2, Rocket, Flag, Globe, AtSign, Trophy, Clock } from 'lucide-react';
+import { useState, useEffect, useRef, type FormEvent } from 'react';
+import { Activity, Cpu, Zap, PlusCircle, CheckCircle2, User, ShieldAlert, Lock, Mail, ExternalLink, X, Layers, Briefcase, Calendar, MapPin, Code2, Rocket, Flag, Globe, AtSign, Trophy, Clock } from 'lucide-react';
 
 interface Task {
   id: string;
@@ -52,9 +52,7 @@ interface UserStats {
 
 type ViewState = 'home' | 'about' | 'matrix' | 'leaderboard' | 'history';
 
-const BACKEND_URL = "http://localhost:5000"; 
-const CLOUDINARY_UPLOAD_URL = "https://api.cloudinary.com/v1_1/dbidykk4a/image/upload";
-const CLOUDINARY_UPLOAD_PRESET = "antigravity_preset";
+const BACKEND_URL = "http://localhost:5000";
 
 interface VerifierProps {
   onVerify: () => void;
@@ -276,24 +274,7 @@ export default function App() {
     }
   };
 
-  const logSystemAction = async (action_type: string, description: string, bounty_snapshot: number) => {
-    if (!session.user) return;
-    try {
-      await fetch(`${BACKEND_URL}/api/history`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          user_id: session.user.id,
-          action_type,
-          description,
-          bounty_snapshot
-        })
-      });
-      fetchHistory(session.user.id);
-    } catch (e) {
-      console.error(e);
-    }
-  };
+
 
   const fetchLeaderboard = async () => {
     try {
