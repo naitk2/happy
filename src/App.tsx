@@ -17,10 +17,12 @@ interface Task {
 interface Solution {
   id: string;
   taskId: string;
+  solverId: number;
   solverUsername: string;
   proofUrl: string;
   explanation: string;
   status: 'pending' | 'accepted';
+  bounty: number;
 }
 
 interface SystemHistory {
@@ -53,6 +55,126 @@ type ViewState = 'home' | 'about' | 'matrix' | 'leaderboard' | 'history';
 const BACKEND_URL = "http://localhost:5000"; 
 const CLOUDINARY_UPLOAD_URL = "https://api.cloudinary.com/v1_1/dbidykk4a/image/upload";
 const CLOUDINARY_UPLOAD_PRESET = "antigravity_preset";
+
+interface VerifierProps {
+  onVerify: () => void;
+  onCancel: () => void;
+}
+
+function AntiGravityVerifier({ onVerify, onCancel }: VerifierProps) {
+  const [angle, setAngle] = useState(120);
+  const targetMin = 175;
+  const targetMax = 205;
+  const isAligned = angle >= targetMin && angle <= targetMax;
+
+  return (
+    <div className="flex flex-col gap-5 bg-black border border-gray-800 rounded-xl p-6 shadow-inner w-full font-mono text-white relative">
+      <div className="flex items-center justify-between border-b border-gray-900 pb-3">
+        <div className="flex items-center gap-2">
+          <ShieldAlert className="h-4 w-4 text-[#00FFCC] animate-pulse" />
+          <span className="text-[10px] font-bold tracking-widest uppercase">ANTI-GRAVITY VECTOR VERIFICATION</span>
+        </div>
+      </div>
+
+      <div className="flex flex-col items-center gap-4 py-2">
+        {/* Orbital SVG Graph */}
+        <div className="relative w-36 h-36 border border-gray-800 rounded-full flex items-center justify-center bg-[#05070A]">
+          {/* Target Orbit Region */}
+          <svg className="absolute inset-0 w-full h-full transform -rotate-90">
+            {/* Background circle */}
+            <circle
+              cx="72"
+              cy="72"
+              r="55"
+              fill="none"
+              stroke="#1F2937"
+              strokeWidth="2"
+              strokeDasharray="4 4"
+            />
+            {/* Draw target arc */}
+            <circle
+              cx="72"
+              cy="72"
+              r="55"
+              fill="none"
+              stroke="#00FFCC"
+              strokeWidth="4"
+              strokeDasharray={`${(targetMax - targetMin) * (2 * Math.PI * 55) / 360} 400`}
+              transform={`rotate(${targetMin - 90}, 72, 72)`}
+              className="opacity-40"
+            />
+          </svg>
+
+          {/* Draggable/Animated Node */}
+          {(() => {
+            const rad = (angle - 90) * Math.PI / 180;
+            const x = 72 + 55 * Math.cos(rad);
+            const y = 72 + 55 * Math.sin(rad);
+            return (
+              <div 
+                className={`absolute w-3.5 h-3.5 rounded-full transition-shadow duration-150 ${isAligned ? 'bg-[#00FFCC] shadow-[0_0_12px_#00FFCC] animate-ping' : 'bg-gray-600'}`}
+                style={{ left: `${x - 7}px`, top: `${y - 7}px` }}
+              />
+            );
+          })()}
+          
+          {/* Real dot showing positioning */}
+          {(() => {
+            const rad = (angle - 90) * Math.PI / 180;
+            const x = 72 + 55 * Math.cos(rad);
+            const y = 72 + 55 * Math.sin(rad);
+            return (
+              <div 
+                className={`absolute w-3 h-3 rounded-full border border-black transition-colors duration-150 ${isAligned ? 'bg-[#00FFCC] shadow-[0_0_10px_#00FFCC]' : 'bg-gray-400'}`}
+                style={{ left: `${x - 6}px`, top: `${y - 6}px` }}
+              />
+            );
+          })()}
+
+          <div className="flex flex-col items-center justify-center z-10 text-center gap-1">
+            <span className="text-[9px] text-gray-500 uppercase tracking-widest">Alignment</span>
+            <span className={`text-xs font-bold font-mono ${isAligned ? 'text-[#00FFCC]' : 'text-gray-400'}`}>
+              {angle}°
+            </span>
+          </div>
+        </div>
+
+        <div className="w-full flex flex-col gap-1">
+          <div className="flex justify-between text-[9px] text-gray-500 tracking-wider">
+            <span>VECTOR PHASE</span>
+            <span className={isAligned ? 'text-[#00FFCC] font-bold' : 'text-gray-400'}>
+              {isAligned ? 'VECTOR ALIGNED' : 'DE-ALIGNED'}
+            </span>
+          </div>
+          <input 
+            type="range" 
+            min="0" 
+            max="360" 
+            value={angle} 
+            onChange={(e) => setAngle(Number(e.target.value))} 
+            className="w-full accent-[#00FFCC] bg-black h-1 rounded cursor-pointer"
+          />
+        </div>
+      </div>
+
+      <div className="flex gap-3 justify-end mt-1 text-xs">
+        <button 
+          onClick={onCancel}
+          className="text-gray-500 hover:text-white uppercase font-bold tracking-wider px-2 cursor-pointer"
+        >
+          Cancel
+        </button>
+        <button 
+          onClick={onVerify}
+          disabled={!isAligned}
+          className="flex-1 bg-[#00FFCC] text-black font-mono tracking-widest font-bold text-xs uppercase py-2.5 rounded-lg hover:bg-white transition-all disabled:opacity-30 disabled:cursor-not-allowed shadow-[0_0_15px_rgba(0,255,204,0.1)] cursor-pointer"
+        >
+          [ AUTHORIZE SIGNATURE ]
+        </button>
+      </div>
+    </div>
+  );
+}
 
 export default function App() {
   // Navigation State
@@ -92,6 +214,55 @@ export default function App() {
 
   // Zoom Overlay States
   const [zoomedImage, setZoomedImage] = useState<string | null>(null);
+
+  // Verification States
+  const [showAuthVerifier, setShowAuthVerifier] = useState(false);
+  const [showSolveVerifier, setShowSolveVerifier] = useState(false);
+
+  const fetchTasks = async () => {
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/tasks`);
+      if (res.ok) {
+        const data = await res.json();
+        const mappedTasks = data.map((t: any) => ({
+          id: t.id,
+          creator_id: String(t.creator_id),
+          title: t.title,
+          tool: t.tool,
+          mass: t.mass,
+          bounty: t.bounty,
+          timestamp: t.created_at,
+          status: t.status,
+          screenshotUrl: t.screenshot_url || undefined
+        }));
+        setTasks(mappedTasks);
+      }
+    } catch (e) {
+      console.error("Failed to fetch tasks:", e);
+    }
+  };
+
+  const fetchPendingSolutions = async (userId: number) => {
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/solutions/pending/${userId}`);
+      if (res.ok) {
+        const data = await res.json();
+        const mapped = data.map((s: any) => ({
+          id: String(s.id),
+          taskId: s.task_id,
+          solverId: s.solver_id,
+          solverUsername: s.solver_username,
+          proofUrl: s.proof_link,
+          explanation: s.explanation,
+          status: s.status,
+          bounty: s.bounty
+        }));
+        setSolutions(mapped);
+      }
+    } catch (e) {
+      console.error("Failed to fetch pending solutions:", e);
+    }
+  };
 
   const fetchHistory = async (userId: number) => {
     try {
@@ -136,6 +307,29 @@ export default function App() {
     }
   };
 
+  // Track balance changes to trigger floating animation
+  const prevBalanceRef = useRef<number | null>(null);
+  const [creditChange, setCreditChange] = useState<{ amount: number; type: 'add' | 'less'; id: number } | null>(null);
+
+  useEffect(() => {
+    if (session.user) {
+      const currentBalance = session.user.token_balance;
+      if (prevBalanceRef.current !== null && prevBalanceRef.current !== currentBalance) {
+        const diff = currentBalance - prevBalanceRef.current;
+        if (diff !== 0) {
+          setCreditChange({
+            amount: Math.abs(diff),
+            type: diff > 0 ? 'add' : 'less',
+            id: Date.now()
+          });
+        }
+      }
+      prevBalanceRef.current = currentBalance;
+    } else {
+      prevBalanceRef.current = null;
+    }
+  }, [session.user?.token_balance]);
+
   useEffect(() => {
     const savedUser = localStorage.getItem("antigravity_user");
     const token = localStorage.getItem("antigravity_token");
@@ -144,29 +338,81 @@ export default function App() {
       setSession({ isAuthenticated: true, user });
       fetchHistory(user.id);
     }
+    fetchTasks();
   }, []);
 
   useEffect(() => {
-    if (activeView === 'leaderboard') {
+    if (activeView === 'matrix') {
+      fetchTasks();
+      if (session.user) {
+        fetchHistory(session.user.id);
+        fetchPendingSolutions(session.user.id);
+      }
+    } else if (activeView === 'leaderboard') {
       fetchLeaderboard();
+    } else if (activeView === 'history' && session.user) {
+      fetchHistory(session.user.id);
     }
-  }, [activeView]);
+  }, [activeView, session.user?.id]);
+
+  useEffect(() => {
+    if (leftPanelMode === 'review' && session.user) {
+      fetchPendingSolutions(session.user.id);
+    }
+  }, [leftPanelMode, session.user?.id]);
 
   const handleAuthSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setAuthError('');
-    setAuthLoading(true);
+    
+    if (isLoginTab) {
+      setAuthLoading(true);
+      try {
+        const response = await fetch(`${BACKEND_URL}/api/auth/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: authEmail, password: authPassword })
+        });
+        const data = await response.json();
+        if (!response.ok) throw new Error(data.message || data.error || 'Authentication operation failed.');
 
-    const endpoint = isLoginTab ? `${BACKEND_URL}/api/auth/login` : `${BACKEND_URL}/api/auth/register`;
-    const payload = isLoginTab 
-      ? { email: authEmail, password: authPassword }
-      : { username: authUsername, email: authEmail, password: authPassword };
+        localStorage.setItem("antigravity_token", data.token);
+        localStorage.setItem("antigravity_user", JSON.stringify(data.user));
+        setSession({ isAuthenticated: true, user: data.user });
+        
+        await fetch(`${BACKEND_URL}/api/history`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            user_id: data.user.id,
+            action_type: 'NODE_AUTH',
+            description: `Node authentication sequence approved.`,
+            bounty_snapshot: data.user.token_balance
+          })
+        });
+        fetchHistory(data.user.id);
+        fetchTasks();
+      } catch (err: any) {
+        setAuthError(err.message || 'Server connection error.');
+      } finally {
+        setAuthLoading(false);
+      }
+    } else {
+      // For registration: show verifier captcha first!
+      setShowAuthVerifier(true);
+    }
+  };
+
+  const executeRegister = async () => {
+    setAuthError('');
+    setAuthLoading(true);
+    setShowAuthVerifier(false);
 
     try {
-      const response = await fetch(endpoint, {
+      const response = await fetch(`${BACKEND_URL}/api/auth/register`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
+        body: JSON.stringify({ username: authUsername, email: authEmail, password: authPassword })
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.message || data.error || 'Authentication operation failed.');
@@ -181,11 +427,12 @@ export default function App() {
         body: JSON.stringify({
           user_id: data.user.id,
           action_type: 'NODE_AUTH',
-          description: `Node authentication sequence approved.`,
+          description: `Node registration complete. Sequence approved.`,
           bounty_snapshot: data.user.token_balance
         })
       });
       fetchHistory(data.user.id);
+      fetchTasks();
     } catch (err: any) {
       setAuthError(err.message || 'Server connection error.');
     } finally {
@@ -199,34 +446,56 @@ export default function App() {
     setSession({ isAuthenticated: false, user: null });
   };
 
-  const handleDeployTask = (e: FormEvent) => {
+  const handleDeployTask = async (e: FormEvent) => {
     e.preventDefault();
+    if (!session.user) return;
     if (!titleInput.trim() || titleInput.length < 10) {
       alert("Error: Specification logs must be at least 10 characters long.");
       return;
     }
-    const newTask: Task = {
-      id: `task-${Date.now()}`,
-      creator_id: session.user?.id.toString() || 'unknown',
+    if (session.user.token_balance < bountyInput) {
+      alert("Error: Insufficient credits to deploy this roadblock.");
+      return;
+    }
+
+    const taskId = `task-${Date.now()}`;
+    const payload = {
+      id: taskId,
+      creator_id: session.user.id,
       title: titleInput,
       tool: toolInput,
       mass: massInput,
       bounty: bountyInput,
-      timestamp: new Date().toISOString(),
-      status: 'active',
-      screenshotUrl: deployScreenshotUrl || undefined
+      screenshot_url: deployScreenshotUrl || null
     };
-    setTasks([newTask, ...tasks]);
-    setTitleInput('');
-    setDeployScreenshotUrl('');
-    if (session.user) {
-      logSystemAction('DEPLOY_MASS', `Deployed target sequence: ${titleInput.substring(0, 25)}...`, session.user.token_balance);
+
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/tasks`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Deployment failed.");
+
+      const updatedUser = { ...session.user, token_balance: data.newBalance };
+      setSession({ ...session, user: updatedUser });
+      localStorage.setItem("antigravity_user", JSON.stringify(updatedUser));
+
+      fetchTasks();
+      fetchHistory(session.user.id);
+
+      setTitleInput('');
+      setDeployScreenshotUrl('');
+    } catch (err: any) {
+      alert("Deployment error: " + err.message);
     }
   };
 
   const handleInjectLiftClick = (task: Task) => {
     setActiveTaskForFix(task);
     setIsSolveModalOpen(true);
+    setShowSolveVerifier(false); // Reset solve verifier state
   };
 
   const handleSolutionSubmit = async () => {
@@ -234,45 +503,82 @@ export default function App() {
       alert("Please provide a proof link along with an explanation.");
       return;
     }
-    
-    setIsUploading(true);
-    let finalUrl = proofUrlInput.trim();
-
-    const newSolution: Solution = {
-      id: `sol-${Date.now()}`,
-      taskId: activeTaskForFix.id,
-      solverUsername: session.user.username,
-      proofUrl: finalUrl,
-      explanation: explanationInput,
-      status: 'pending'
-    };
-
-    setSolutions([newSolution, ...solutions]);
-    
-    setTasks(tasks.map(t => t.id === activeTaskForFix.id ? { ...t, animating: true } : t));
-    
-    setTimeout(() => {
-      setTasks(prev => prev.filter(t => t.id !== activeTaskForFix.id));
-      if (session.user) {
-        logSystemAction('INJECT_LIFT', `Submitted patch for target node ${activeTaskForFix.id}`, session.user.token_balance);
-      }
-    }, 500);
-
-    setIsSolveModalOpen(false);
-    setActiveTaskForFix(null);
-    setProofUrlInput('');
-    setExplanationInput('');
-    setIsUploading(false);
+    // Show verifier captcha first!
+    setShowSolveVerifier(true);
   };
 
-  const handleVerifySolution = (solutionId: string) => {
+  const executeSolutionSubmit = async () => {
+    if (!activeTaskForFix || !session.user) return;
+    setIsUploading(true);
+    setShowSolveVerifier(false);
+    
+    let finalUrl = proofUrlInput.trim();
+    const payload = {
+      task_id: activeTaskForFix.id,
+      task_title: activeTaskForFix.title,
+      creator_id: activeTaskForFix.creator_id,
+      solver_id: session.user.id,
+      solver_username: session.user.username,
+      proof_link: finalUrl,
+      explanation: explanationInput
+    };
+
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/solutions/submit`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Failed to submit solution.");
+
+      // Visual animation on current tasks
+      setTasks(tasks.map(t => t.id === activeTaskForFix.id ? { ...t, animating: true } : t));
+      
+      setTimeout(() => {
+        setTasks(prev => prev.filter(t => t.id !== activeTaskForFix.id));
+        if (session.user) {
+          fetchHistory(session.user.id);
+        }
+      }, 500);
+
+      setIsSolveModalOpen(false);
+      setActiveTaskForFix(null);
+      setProofUrlInput('');
+      setExplanationInput('');
+    } catch (err: any) {
+      alert("Solution submission error: " + err.message);
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleVerifySolution = async (solutionId: string) => {
     if (!session.user) return;
-    setSolutions(solutions.map(s => s.id === solutionId ? { ...s, status: 'accepted' } : s));
-    setSession({
-      ...session,
-      user: { ...session.user, token_balance: session.user.token_balance + 100 }
-    });
-    fetchHistory(session.user.id);
+    const sol = solutions.find(s => s.id === solutionId);
+    if (!sol) return;
+
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/solutions/verify`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          solution_id: parseInt(sol.id),
+          task_id: sol.taskId,
+          creator_id: session.user.id,
+          solver_id: sol.solverId,
+          bounty_amount: sol.bounty
+        })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || "Verification failed.");
+
+      // Refresh solutions and history
+      fetchPendingSolutions(session.user.id);
+      fetchHistory(session.user.id);
+    } catch (err: any) {
+      alert("Verification error: " + err.message);
+    }
   };
 
   if (!session.isAuthenticated) {
@@ -309,34 +615,41 @@ export default function App() {
             </div>
           )}
 
-          <form onSubmit={handleAuthSubmit} className="flex flex-col gap-4">
-            {!isLoginTab && (
+          {showAuthVerifier ? (
+            <AntiGravityVerifier 
+              onVerify={executeRegister} 
+              onCancel={() => setShowAuthVerifier(false)} 
+            />
+          ) : (
+            <form onSubmit={handleAuthSubmit} className="flex flex-col gap-4">
+              {!isLoginTab && (
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs text-gray-400 tracking-wider">HANDLE USERNAME</label>
+                  <div className="relative">
+                    <User className="absolute left-3 top-3 h-4 w-4 text-gray-600" />
+                    <input type="text" required value={authUsername} onChange={(e) => setAuthUsername(e.target.value)} className="w-full bg-black border border-gray-800 focus:border-[#00FFCC] text-white rounded-lg pl-10 pr-4 py-2.5 focus:outline-none text-sm" />
+                  </div>
+                </div>
+              )}
               <div className="flex flex-col gap-1.5">
-                <label className="text-xs text-gray-400 tracking-wider">HANDLE USERNAME</label>
+                <label className="text-xs text-gray-400 tracking-wider">EMAIL MATRIX LINK</label>
                 <div className="relative">
-                  <User className="absolute left-3 top-3 h-4 w-4 text-gray-600" />
-                  <input type="text" required value={authUsername} onChange={(e) => setAuthUsername(e.target.value)} className="w-full bg-black border border-gray-800 focus:border-[#00FFCC] text-white rounded-lg pl-10 pr-4 py-2.5 focus:outline-none text-sm" />
+                  <Mail className="absolute left-3 top-3 h-4 w-4 text-gray-600" />
+                  <input type="email" required value={authEmail} onChange={(e) => setAuthEmail(e.target.value)} className="w-full bg-black border border-gray-800 focus:border-[#00FFCC] text-white rounded-lg pl-10 pr-4 py-2.5 focus:outline-none text-sm" />
                 </div>
               </div>
-            )}
-            <div className="flex flex-col gap-1.5">
-              <label className="text-xs text-gray-400 tracking-wider">EMAIL MATRIX LINK</label>
-              <div className="relative">
-                <Mail className="absolute left-3 top-3 h-4 w-4 text-gray-600" />
-                <input type="email" required value={authEmail} onChange={(e) => setAuthEmail(e.target.value)} className="w-full bg-black border border-gray-800 focus:border-[#00FFCC] text-white rounded-lg pl-10 pr-4 py-2.5 focus:outline-none text-sm" />
+              <div className="flex flex-col gap-1.5">
+                <label className="text-xs text-gray-400 tracking-wider">ACCESS CODE PASSWORD</label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-3 h-4 w-4 text-gray-600" />
+                  <input type="password" required value={authPassword} onChange={(e) => setAuthPassword(e.target.value)} className="w-full bg-black border border-gray-800 focus:border-[#00FFCC] text-white rounded-lg pl-10 pr-4 py-2.5 focus:outline-none text-sm" />
+                </div>
               </div>
-            </div>
-            <div className="flex flex-col gap-1.5">
-              <label className="text-xs text-gray-400 tracking-wider">ACCESS CODE PASSWORD</label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-3 h-4 w-4 text-gray-600" />
-                <input type="password" required value={authPassword} onChange={(e) => setAuthPassword(e.target.value)} className="w-full bg-black border border-gray-800 focus:border-[#00FFCC] text-white rounded-lg pl-10 pr-4 py-2.5 focus:outline-none text-sm" />
-              </div>
-            </div>
-            <button type="submit" disabled={authLoading} className="w-full bg-[#00FFCC] text-black font-bold uppercase tracking-wider py-3 mt-2 rounded-lg hover:bg-white active:scale-95 transition-all text-sm disabled:opacity-50 glow-on-hover shadow-[0_0_15px_rgba(0,255,204,0.2)]">
-              {authLoading ? "SYNCHRONIZING..." : isLoginTab ? "AUTHENTICATE CORE" : "INITIALIZE NODE"}
-            </button>
-          </form>
+              <button type="submit" disabled={authLoading} className="w-full bg-[#00FFCC] text-black font-bold uppercase tracking-wider py-3 mt-2 rounded-lg hover:bg-white active:scale-95 transition-all text-sm disabled:opacity-50 glow-on-hover shadow-[0_0_15px_rgba(0,255,204,0.2)]">
+                {authLoading ? "SYNCHRONIZING..." : isLoginTab ? "AUTHENTICATE CORE" : "INITIALIZE NODE"}
+              </button>
+            </form>
+          )}
         </div>
       </div>
     );
@@ -386,11 +699,20 @@ export default function App() {
       </div>
 
       <div className="flex items-center gap-3 text-xs">
-        <div className="bg-black border border-gray-800 px-3 py-2 rounded-lg flex items-center gap-2 text-gray-300">
+        <div className="relative bg-black border border-gray-800 px-3 py-2 rounded-lg flex items-center gap-2 text-gray-300">
           <User className="h-4 w-4 text-[#00FFCC]" />
           <span className="uppercase text-white font-bold">{session.user?.username}</span>
           <span className="text-gray-500">|</span>
-          <span className="text-[#00FFCC]">⟠ {session.user?.token_balance} CREDITS</span>
+          <span className="text-[#00FFCC] transition-all duration-300">⟠ {session.user?.token_balance} CREDITS</span>
+          {creditChange && (
+            <div 
+              key={creditChange.id}
+              className={`absolute -top-8 right-2 font-mono font-bold text-xs animate-float-up ${creditChange.type === 'add' ? 'text-emerald-400 drop-shadow-[0_0_8px_rgba(52,211,153,0.5)]' : 'text-rose-500 drop-shadow-[0_0_8px_rgba(244,63,94,0.5)]'}`}
+              onAnimationEnd={() => setCreditChange(null)}
+            >
+              {creditChange.type === 'add' ? '+' : '-'}⟠{creditChange.amount}
+            </div>
+          )}
         </div>
         <button onClick={handleLogout} className="text-gray-500 hover:text-red-400 px-2 transition-colors cursor-pointer text-[10px] tracking-widest uppercase font-bold">
           DISCONNECT
@@ -890,50 +1212,57 @@ export default function App() {
               <X size={18} />
             </button>
             
-            <div className="flex items-center gap-2 text-[#00FFCC] font-bold border-b border-gray-800 pb-3">
-              <Zap size={20} className="animate-pulse" />
-              <span className="tracking-widest uppercase">SUBMIT AUTOMATION PATCH ENGINE</span>
-            </div>
-
-            <div className="flex flex-col gap-1 text-xs bg-black p-3 rounded-lg border border-gray-900">
-              <span className="text-gray-500 uppercase tracking-widest">Targeting:</span>
-              <span className="text-white font-mono break-words">{activeTaskForFix.title}</span>
-            </div>
-
-            <div className="flex flex-col gap-1.5">
-              <label className="text-[10px] text-gray-400 tracking-widest uppercase">Proof URL Link</label>
-              <input 
-                type="url" 
-                value={proofUrlInput}
-                onChange={(e) => setProofUrlInput(e.target.value)}
-                placeholder="Paste Loom capture link or GitHub Gist URL..."
-                className="w-full bg-black border border-gray-800 focus:border-[#00FFCC] text-white rounded-lg p-3 text-xs focus:outline-none transition-colors"
+            {showSolveVerifier ? (
+              <AntiGravityVerifier 
+                onVerify={executeSolutionSubmit} 
+                onCancel={() => setShowSolveVerifier(false)} 
               />
-            </div>
-            
-            {/* The file upload block has been removed in favor of URL exclusively */}
+            ) : (
+              <>
+                <div className="flex items-center gap-2 text-[#00FFCC] font-bold border-b border-gray-800 pb-3">
+                  <Zap size={20} className="animate-pulse" />
+                  <span className="tracking-widest uppercase">SUBMIT AUTOMATION PATCH ENGINE</span>
+                </div>
 
-            <div className="flex flex-col gap-1.5">
-              <label className="text-[10px] text-gray-400 tracking-widest uppercase">Technical Fix Explanation</label>
-              <textarea 
-                rows={4}
-                value={explanationInput}
-                onChange={(e) => setExplanationInput(e.target.value)}
-                placeholder="Break down the configuration change or code adjustment made to bypass this error log exception..."
-                className="w-full bg-black border border-gray-800 focus:border-[#00FFCC] text-white rounded-lg p-3 text-xs focus:outline-none leading-relaxed resize-none transition-colors"
-              />
-            </div>
+                <div className="flex flex-col gap-1 text-xs bg-black p-3 rounded-lg border border-gray-900">
+                  <span className="text-gray-500 uppercase tracking-widest">Targeting:</span>
+                  <span className="text-white font-mono break-words">{activeTaskForFix.title}</span>
+                </div>
 
-            <div className="flex justify-between items-center mt-2 gap-4">
-              <button onClick={() => setIsSolveModalOpen(false)} disabled={isUploading} className="text-xs text-gray-500 hover:text-white font-bold tracking-wider uppercase px-2 disabled:opacity-50 cursor-pointer">CANCEL</button>
-              <button 
-                onClick={handleSolutionSubmit} 
-                disabled={isUploading}
-                className="flex-1 bg-[#00FFCC] text-black font-mono tracking-widest font-bold text-xs uppercase py-3.5 rounded-lg hover:bg-white active:scale-95 transition-all shadow-[0_0_15px_rgba(0,255,204,0.15)] glow-on-hover disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isUploading ? 'UPLOADING...' : 'TRANSMIT RESOLUTION INTO MATRIX'}
-              </button>
-            </div>
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[10px] text-gray-400 tracking-widest uppercase">Proof URL Link</label>
+                  <input 
+                    type="url" 
+                    value={proofUrlInput}
+                    onChange={(e) => setProofUrlInput(e.target.value)}
+                    placeholder="Paste Loom capture link or GitHub Gist URL..."
+                    className="w-full bg-black border border-gray-800 focus:border-[#00FFCC] text-white rounded-lg p-3 text-xs focus:outline-none transition-colors"
+                  />
+                </div>
+                
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[10px] text-gray-400 tracking-widest uppercase">Technical Fix Explanation</label>
+                  <textarea 
+                    rows={4}
+                    value={explanationInput}
+                    onChange={(e) => setExplanationInput(e.target.value)}
+                    placeholder="Break down the configuration change or code adjustment made to bypass this error log exception..."
+                    className="w-full bg-black border border-gray-800 focus:border-[#00FFCC] text-white rounded-lg p-3 text-xs focus:outline-none leading-relaxed resize-none transition-colors"
+                  />
+                </div>
+
+                <div className="flex justify-between items-center mt-2 gap-4">
+                  <button onClick={() => setIsSolveModalOpen(false)} disabled={isUploading} className="text-xs text-gray-500 hover:text-white font-bold tracking-wider uppercase px-2 disabled:opacity-50 cursor-pointer">CANCEL</button>
+                  <button 
+                    onClick={handleSolutionSubmit} 
+                    disabled={isUploading}
+                    className="flex-1 bg-[#00FFCC] text-black font-mono tracking-widest font-bold text-xs uppercase py-3.5 rounded-lg hover:bg-white active:scale-95 transition-all shadow-[0_0_15px_rgba(0,255,204,0.15)] glow-on-hover disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isUploading ? 'UPLOADING...' : 'TRANSMIT RESOLUTION INTO MATRIX'}
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}

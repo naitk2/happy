@@ -74,3 +74,22 @@ input, select, textarea, button {
     transform: translateY(0);
   }
 }
+
+@keyframes floatUp {
+  0% {
+    opacity: 0;
+    transform: translateY(10px) scale(0.9);
+  }
+  20% {
+    opacity: 1;
+    transform: translateY(-5px) scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-30px) scale(1);
+  }
+}
+
+.animate-float-up {
+  animation: floatUp 1.2s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+}
