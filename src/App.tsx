@@ -217,6 +217,16 @@ export default function App() {
   const [showAuthVerifier, setShowAuthVerifier] = useState(false);
   const [showSolveVerifier, setShowSolveVerifier] = useState(false);
 
+  // Email Verification & Password Reset States
+  const [showVerifyEmailScreen, setShowVerifyEmailScreen] = useState(false);
+  const [verifyEmail, setVerifyEmail] = useState('');
+  const [verificationCodeInput, setVerificationCodeInput] = useState('');
+  const [isForgotPasswordMode, setIsForgotPasswordMode] = useState(false);
+  const [forgotPasswordSuccessMsg, setForgotPasswordSuccessMsg] = useState('');
+  const [urlResetToken, setUrlResetToken] = useState<string | null>(null);
+  const [newPasswordInput, setNewPasswordInput] = useState('');
+  const [resetPasswordSuccessMsg, setResetPasswordSuccessMsg] = useState('');
+
   const fetchTasks = async () => {
     try {
       const res = await fetch(`${BACKEND_URL}/api/tasks`);
@@ -312,9 +322,16 @@ export default function App() {
   }, [session.user?.token_balance]);
 
   useEffect(() => {
+    // Check for resetToken in query string
+    const params = new URLSearchParams(window.location.search);
+    const token = params.get('resetToken');
+    if (token) {
+      setUrlResetToken(token);
+    }
+
     const savedUser = localStorage.getItem("antigravity_user");
-    const token = localStorage.getItem("antigravity_token");
-    if (savedUser && token) {
+    const tokenVal = localStorage.getItem("antigravity_token");
+    if (savedUser && tokenVal) {
       const user = JSON.parse(savedUser);
       setSession({ isAuthenticated: true, user });
       fetchHistory(user.id);
@@ -355,6 +372,13 @@ export default function App() {
           body: JSON.stringify({ email: authEmail, password: authPassword })
         });
         const data = await response.json();
+        
+        if (response.status === 403) {
+          // Verification required!
+          setVerifyEmail(authEmail);
+          setShowVerifyEmailScreen(true);
+          return;
+        }
         if (!response.ok) throw new Error(data.message || data.error || 'Authentication operation failed.');
 
         localStorage.setItem("antigravity_token", data.token);
@@ -398,6 +422,29 @@ export default function App() {
       const data = await response.json();
       if (!response.ok) throw new Error(data.message || data.error || 'Authentication operation failed.');
 
+      // Registration successful! Now transition to verify email screen
+      setVerifyEmail(authEmail);
+      setShowVerifyEmailScreen(true);
+    } catch (err: any) {
+      setAuthError(err.message || 'Server connection error.');
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const handleVerifyEmailSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    setAuthError('');
+    setAuthLoading(true);
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/auth/verify-email`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: verifyEmail, code: verificationCodeInput })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || data.error || 'Email verification failed.');
+
       localStorage.setItem("antigravity_token", data.token);
       localStorage.setItem("antigravity_user", JSON.stringify(data.user));
       setSession({ isAuthenticated: true, user: data.user });
@@ -408,14 +455,71 @@ export default function App() {
         body: JSON.stringify({
           user_id: data.user.id,
           action_type: 'NODE_AUTH',
-          description: `Node registration complete. Sequence approved.`,
+          description: `Email verified successfully. Node authorized.`,
           bounty_snapshot: data.user.token_balance
         })
       });
       fetchHistory(data.user.id);
       fetchTasks();
+
+      // Reset state
+      setShowVerifyEmailScreen(false);
+      setVerificationCodeInput('');
+    } catch (err: any) {
+      setAuthError(err.message || 'Verification error.');
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const handleForgotPasswordSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    setAuthError('');
+    setAuthLoading(true);
+    setForgotPasswordSuccessMsg('');
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/auth/forgot-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: authEmail })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to request password reset.');
+
+      setForgotPasswordSuccessMsg(data.message || 'Recovery link dispatched to your email.');
     } catch (err: any) {
       setAuthError(err.message || 'Server connection error.');
+    } finally {
+      setAuthLoading(false);
+    }
+  };
+
+  const handleResetPasswordSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    setAuthError('');
+    setAuthLoading(true);
+    setResetPasswordSuccessMsg('');
+    try {
+      const res = await fetch(`${BACKEND_URL}/api/auth/reset-password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: urlResetToken, newPassword: newPasswordInput })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Failed to reset password.');
+
+      setResetPasswordSuccessMsg(data.message || 'Credentials updated successfully.');
+      setNewPasswordInput('');
+      
+      // Clear URL reset token
+      window.history.replaceState({}, document.title, "/");
+      setTimeout(() => {
+        setUrlResetToken(null);
+        setResetPasswordSuccessMsg('');
+        setIsForgotPasswordMode(false);
+      }, 3000);
+    } catch (err: any) {
+      setAuthError(err.message || 'Reset password error.');
     } finally {
       setAuthLoading(false);
     }
@@ -561,7 +665,6 @@ export default function App() {
       alert("Verification error: " + err.message);
     }
   };
-
   if (!session.isAuthenticated) {
     return (
       <div className="min-h-screen bg-black flex items-center justify-center p-4 font-mono select-none relative text-white">
@@ -569,72 +672,238 @@ export default function App() {
         <div className="absolute inset-0 bg-[url('data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHdpZHRoPSI0IiBoZWlnaHQ9IjQiPgo8cmVjdCB3aWR0aD0iNCIgaGVpZ2h0PSI0IiBmaWxsPSIjMDAwIiBmaWxsLW9wYWNpdHk9IjAiLz4KPHJlY3Qgd2lkdGg9IjEiIGhlaWdodD0iNCIgZmlsbD0icmdiYSgyNTUsIDI1NSwgMjU1LCAwLjAyKSIvPgo8cmVjdCB3aWR0aD0iNCIgaGVpZ2h0PSIxIiBmaWxsPSJyZ2JhKDI1NSwgMjU1LCAyNTUsIDAuMDIpIi8+Cjwvc3ZnPg==')] z-0 pointer-events-none opacity-50"></div>
         
         <div className="w-full max-w-md bg-[#0B0F17] border border-gray-800 rounded-2xl p-8 flex flex-col gap-6 relative z-10 animate-fade-in shadow-[0_0_50px_rgba(0,255,204,0.05)]">
-          <div className="flex items-center gap-2 justify-center mb-2">
-            <div className="h-3 w-3 rounded-full bg-[#00FFCC] animate-pulse" />
-            <span className="text-xl font-bold tracking-widest">ANTIGRAVITY // AUTH</span>
-          </div>
+          {urlResetToken ? (
+            // RESET PASSWORD VIEW
+            <>
+              <div className="flex items-center gap-2 justify-center mb-2">
+                <div className="h-3 w-3 rounded-full bg-[#00FFCC] animate-pulse" />
+                <span className="text-xl font-bold tracking-widest text-center">ANTIGRAVITY // RESET PASSWORD</span>
+              </div>
+              <p className="text-xs text-gray-400 text-center tracking-wider leading-relaxed">
+                OVERRIDE ACCESS CREDENTIALS FOR YOUR SECURE CONSOLE NODE.
+              </p>
 
-          <div className="grid grid-cols-2 border-b border-gray-800">
-            <button 
-              onClick={() => { setIsLoginTab(true); setAuthError(''); }}
-              className={`pb-3 text-center text-sm font-bold tracking-wider uppercase transition-colors ${isLoginTab ? 'text-[#00FFCC] border-b-2 border-[#00FFCC]' : 'text-gray-500 hover:text-white'}`}
-            >
-              Sign In
-            </button>
-            <button 
-              onClick={() => { setIsLoginTab(false); setAuthError(''); }}
-              className={`pb-3 text-center text-sm font-bold tracking-wider uppercase transition-colors ${!isLoginTab ? 'text-[#00FFCC] border-b-2 border-[#00FFCC]' : 'text-gray-500 hover:text-white'}`}
-            >
-              Register Node
-            </button>
-          </div>
-
-          {authError && (
-            <div className="bg-red-950/40 border border-red-800 rounded-lg p-3 text-xs text-red-400 flex items-center gap-2">
-              <ShieldAlert className="h-4 w-4 shrink-0" />
-              <span>{authError}</span>
-            </div>
-          )}
-
-          {showAuthVerifier ? (
-            <AntiGravityVerifier 
-              onVerify={executeRegister} 
-              onCancel={() => setShowAuthVerifier(false)} 
-            />
-          ) : (
-            <form onSubmit={handleAuthSubmit} className="flex flex-col gap-4">
-              {!isLoginTab && (
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-xs text-gray-400 tracking-wider">HANDLE USERNAME</label>
-                  <div className="relative">
-                    <User className="absolute left-3 top-3 h-4 w-4 text-gray-600" />
-                    <input type="text" required value={authUsername} onChange={(e) => setAuthUsername(e.target.value)} className="w-full bg-black border border-gray-800 focus:border-[#00FFCC] text-white rounded-lg pl-10 pr-4 py-2.5 focus:outline-none text-sm" />
-                  </div>
+              {authError && (
+                <div className="bg-red-950/40 border border-red-800 rounded-lg p-3 text-xs text-red-400 flex items-center gap-2">
+                  <ShieldAlert className="h-4 w-4 shrink-0" />
+                  <span>{authError}</span>
                 </div>
               )}
-              <div className="flex flex-col gap-1.5">
-                <label className="text-xs text-gray-400 tracking-wider">EMAIL MATRIX LINK</label>
-                <div className="relative">
-                  <Mail className="absolute left-3 top-3 h-4 w-4 text-gray-600" />
-                  <input type="email" required value={authEmail} onChange={(e) => setAuthEmail(e.target.value)} className="w-full bg-black border border-gray-800 focus:border-[#00FFCC] text-white rounded-lg pl-10 pr-4 py-2.5 focus:outline-none text-sm" />
+
+              {resetPasswordSuccessMsg && (
+                <div className="bg-emerald-950/40 border border-emerald-800 rounded-lg p-3 text-xs text-emerald-400 flex items-center gap-2">
+                  <CheckCircle2 className="h-4 w-4 shrink-0" />
+                  <span>{resetPasswordSuccessMsg}</span>
                 </div>
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <label className="text-xs text-gray-400 tracking-wider">ACCESS CODE PASSWORD</label>
-                <div className="relative">
-                  <Lock className="absolute left-3 top-3 h-4 w-4 text-gray-600" />
-                  <input type="password" required value={authPassword} onChange={(e) => setAuthPassword(e.target.value)} className="w-full bg-black border border-gray-800 focus:border-[#00FFCC] text-white rounded-lg pl-10 pr-4 py-2.5 focus:outline-none text-sm" />
+              )}
+
+              <form onSubmit={handleResetPasswordSubmit} className="flex flex-col gap-4">
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs text-gray-400 tracking-wider">NEW ACCESS CODE PASSWORD</label>
+                  <div className="relative">
+                    <Lock className="absolute left-3 top-3 h-4 w-4 text-gray-600" />
+                    <input 
+                      type="password" 
+                      required 
+                      value={newPasswordInput} 
+                      onChange={(e) => setNewPasswordInput(e.target.value)} 
+                      placeholder="ENTER NEW PASSWORD"
+                      className="w-full bg-black border border-gray-800 focus:border-[#00FFCC] text-white rounded-lg pl-10 pr-4 py-2.5 focus:outline-none text-sm" 
+                    />
+                  </div>
                 </div>
+                <button type="submit" disabled={authLoading} className="w-full bg-[#00FFCC] text-black font-bold uppercase tracking-wider py-3 mt-2 rounded-lg hover:bg-white active:scale-95 transition-all text-sm disabled:opacity-50 glow-on-hover shadow-[0_0_15px_rgba(0,255,204,0.2)]">
+                  {authLoading ? "RESETTING..." : "CONFIRM NEW PASSWORD"}
+                </button>
+                <button 
+                  type="button" 
+                  onClick={() => { setUrlResetToken(null); window.history.replaceState({}, document.title, "/"); }} 
+                  className="text-center text-xs text-gray-500 hover:text-white transition-colors"
+                >
+                  ABORT RECOVERY
+                </button>
+              </form>
+            </>
+          ) : showVerifyEmailScreen ? (
+            // VERIFY EMAIL VIEW
+            <>
+              <div className="flex items-center gap-2 justify-center mb-2">
+                <div className="h-3 w-3 rounded-full bg-[#00FFCC] animate-pulse" />
+                <span className="text-xl font-bold tracking-widest text-center">ANTIGRAVITY // VERIFY EMAIL</span>
               </div>
-              <button type="submit" disabled={authLoading} className="w-full bg-[#00FFCC] text-black font-bold uppercase tracking-wider py-3 mt-2 rounded-lg hover:bg-white active:scale-95 transition-all text-sm disabled:opacity-50 glow-on-hover shadow-[0_0_15px_rgba(0,255,204,0.2)]">
-                {authLoading ? "SYNCHRONIZING..." : isLoginTab ? "AUTHENTICATE CORE" : "INITIALIZE NODE"}
-              </button>
-            </form>
+              <p className="text-xs text-gray-400 text-center tracking-wider leading-relaxed font-semibold">
+                ENTER THE 6-DIGIT AUTHORIZATION CODE DISPATCHED TO <span className="text-[#00FFCC]">{verifyEmail}</span>.
+              </p>
+
+              {authError && (
+                <div className="bg-red-950/40 border border-red-800 rounded-lg p-3 text-xs text-red-400 flex items-center gap-2">
+                  <ShieldAlert className="h-4 w-4 shrink-0" />
+                  <span>{authError}</span>
+                </div>
+              )}
+
+              <form onSubmit={handleVerifyEmailSubmit} className="flex flex-col gap-4">
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs text-gray-400 tracking-wider">VERIFICATION CODE</label>
+                  <div className="relative">
+                    <Lock className="absolute left-3 top-3 h-4 w-4 text-gray-600" />
+                    <input 
+                      type="text" 
+                      required 
+                      maxLength={6}
+                      value={verificationCodeInput} 
+                      onChange={(e) => setVerificationCodeInput(e.target.value)} 
+                      placeholder="------"
+                      className="w-full bg-black border border-gray-800 focus:border-[#00FFCC] text-white rounded-lg pl-10 pr-4 py-2.5 focus:outline-none text-sm tracking-[0.5em] text-center font-bold" 
+                    />
+                  </div>
+                </div>
+                <button type="submit" disabled={authLoading} className="w-full bg-[#00FFCC] text-black font-bold uppercase tracking-wider py-3 mt-2 rounded-lg hover:bg-white active:scale-95 transition-all text-sm disabled:opacity-50 glow-on-hover shadow-[0_0_15px_rgba(0,255,204,0.2)]">
+                  {authLoading ? "VERIFYING..." : "VERIFY NODE"}
+                </button>
+                <button 
+                  type="button" 
+                  onClick={() => setShowVerifyEmailScreen(false)} 
+                  className="text-center text-xs text-gray-500 hover:text-white transition-colors"
+                >
+                  BACK TO AUTH CONSOLE
+                </button>
+              </form>
+            </>
+          ) : isForgotPasswordMode ? (
+            // FORGOT PASSWORD VIEW
+            <>
+              <div className="flex items-center gap-2 justify-center mb-2">
+                <div className="h-3 w-3 rounded-full bg-[#00FFCC] animate-pulse" />
+                <span className="text-xl font-bold tracking-widest text-center">ANTIGRAVITY // RECOVERY</span>
+              </div>
+              <p className="text-xs text-gray-400 text-center tracking-wider leading-relaxed">
+                REQUEST A SECURE MATRIX OVERRIDE LINK FOR ACCESS RECOVERY.
+              </p>
+
+              {authError && (
+                <div className="bg-red-950/40 border border-red-800 rounded-lg p-3 text-xs text-red-400 flex items-center gap-2">
+                  <ShieldAlert className="h-4 w-4 shrink-0" />
+                  <span>{authError}</span>
+                </div>
+              )}
+
+              {forgotPasswordSuccessMsg && (
+                <div className="bg-emerald-950/40 border border-emerald-800 rounded-lg p-3 text-xs text-emerald-400 flex items-center gap-2">
+                  <CheckCircle2 className="h-4 w-4 shrink-0" />
+                  <span>{forgotPasswordSuccessMsg}</span>
+                </div>
+              )}
+
+              <form onSubmit={handleForgotPasswordSubmit} className="flex flex-col gap-4">
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-xs text-gray-400 tracking-wider">REGISTERED EMAIL</label>
+                  <div className="relative">
+                    <Mail className="absolute left-3 top-3 h-4 w-4 text-gray-600" />
+                    <input 
+                      type="email" 
+                      required 
+                      value={authEmail} 
+                      onChange={(e) => setAuthEmail(e.target.value)} 
+                      placeholder="ENTER EMAIL ADDRESS"
+                      className="w-full bg-black border border-gray-800 focus:border-[#00FFCC] text-white rounded-lg pl-10 pr-4 py-2.5 focus:outline-none text-sm" 
+                    />
+                  </div>
+                </div>
+                <button type="submit" disabled={authLoading} className="w-full bg-[#00FFCC] text-black font-bold uppercase tracking-wider py-3 mt-2 rounded-lg hover:bg-white active:scale-95 transition-all text-sm disabled:opacity-50 glow-on-hover shadow-[0_0_15px_rgba(0,255,204,0.2)]">
+                  {authLoading ? "DISPATCHING..." : "DISPATCH RECOVERY LINK"}
+                </button>
+                <button 
+                  type="button" 
+                  onClick={() => setIsForgotPasswordMode(false)} 
+                  className="text-center text-xs text-gray-500 hover:text-white transition-colors"
+                >
+                  BACK TO AUTH CONSOLE
+                </button>
+              </form>
+            </>
+          ) : (
+            // DEFAULT AUTH CONSOLE (SIGN IN / REGISTER NODE)
+            <>
+              <div className="flex items-center gap-2 justify-center mb-2">
+                <div className="h-3 w-3 rounded-full bg-[#00FFCC] animate-pulse" />
+                <span className="text-xl font-bold tracking-widest">ANTIGRAVITY // AUTH</span>
+              </div>
+
+              <div className="grid grid-cols-2 border-b border-gray-800">
+                <button 
+                  onClick={() => { setIsLoginTab(true); setAuthError(''); }}
+                  className={`pb-3 text-center text-sm font-bold tracking-wider uppercase transition-colors ${isLoginTab ? 'text-[#00FFCC] border-b-2 border-[#00FFCC]' : 'text-gray-500 hover:text-white'}`}
+                >
+                  Sign In
+                </button>
+                <button 
+                  onClick={() => { setIsLoginTab(false); setAuthError(''); }}
+                  className={`pb-3 text-center text-sm font-bold tracking-wider uppercase transition-colors ${!isLoginTab ? 'text-[#00FFCC] border-b-2 border-[#00FFCC]' : 'text-gray-500 hover:text-white'}`}
+                >
+                  Register Node
+                </button>
+              </div>
+
+              {authError && (
+                <div className="bg-red-950/40 border border-red-800 rounded-lg p-3 text-xs text-red-400 flex items-center gap-2">
+                  <ShieldAlert className="h-4 w-4 shrink-0" />
+                  <span>{authError}</span>
+                </div>
+              )}
+
+              {showAuthVerifier ? (
+                <AntiGravityVerifier 
+                  onVerify={executeRegister} 
+                  onCancel={() => setShowAuthVerifier(false)} 
+                />
+              ) : (
+                <form onSubmit={handleAuthSubmit} className="flex flex-col gap-4">
+                  {!isLoginTab && (
+                    <div className="flex flex-col gap-1.5">
+                      <label className="text-xs text-gray-400 tracking-wider">HANDLE USERNAME</label>
+                      <div className="relative">
+                        <User className="absolute left-3 top-3 h-4 w-4 text-gray-600" />
+                        <input type="text" required value={authUsername} onChange={(e) => setAuthUsername(e.target.value)} className="w-full bg-black border border-gray-800 focus:border-[#00FFCC] text-white rounded-lg pl-10 pr-4 py-2.5 focus:outline-none text-sm" />
+                      </div>
+                    </div>
+                  )}
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs text-gray-400 tracking-wider">EMAIL MATRIX LINK</label>
+                    <div className="relative">
+                      <Mail className="absolute left-3 top-3 h-4 w-4 text-gray-600" />
+                      <input type="email" required value={authEmail} onChange={(e) => setAuthEmail(e.target.value)} className="w-full bg-black border border-gray-800 focus:border-[#00FFCC] text-white rounded-lg pl-10 pr-4 py-2.5 focus:outline-none text-sm" />
+                    </div>
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-xs text-gray-400 tracking-wider">ACCESS CODE PASSWORD</label>
+                    <div className="relative">
+                      <Lock className="absolute left-3 top-3 h-4 w-4 text-gray-600" />
+                      <input type="password" required value={authPassword} onChange={(e) => setAuthPassword(e.target.value)} className="w-full bg-black border border-gray-800 focus:border-[#00FFCC] text-white rounded-lg pl-10 pr-4 py-2.5 focus:outline-none text-sm" />
+                    </div>
+                  </div>
+                  {isLoginTab && (
+                    <div className="flex justify-end -mt-1">
+                      <button 
+                        type="button" 
+                        onClick={() => { setIsForgotPasswordMode(true); setAuthError(''); setForgotPasswordSuccessMsg(''); }} 
+                        className="text-xs text-[#00FFCC]/80 hover:text-[#00FFCC] transition-colors"
+                      >
+                        Forgot Access Code?
+                      </button>
+                    </div>
+                  )}
+                  <button type="submit" disabled={authLoading} className="w-full bg-[#00FFCC] text-black font-bold uppercase tracking-wider py-3 mt-2 rounded-lg hover:bg-white active:scale-95 transition-all text-sm disabled:opacity-50 glow-on-hover shadow-[0_0_15px_rgba(0,255,204,0.2)]">
+                    {authLoading ? "SYNCHRONIZING..." : isLoginTab ? "AUTHENTICATE CORE" : "INITIALIZE NODE"}
+                  </button>
+                </form>
+              )}
+            </>
           )}
         </div>
       </div>
     );
-  }
+  }}
 
   // --- RENDER FUNCTIONS FOR VIEWS --- //
 
