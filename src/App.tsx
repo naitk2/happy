@@ -52,7 +52,7 @@ interface UserStats {
 
 type ViewState = 'home' | 'about' | 'matrix' | 'leaderboard' | 'history';
 
-const BACKEND_URL = "http://localhost:5000";
+const BACKEND_URL = "https://antigravity-backend-o17a.onrender.com";
 
 interface VerifierProps {
   onVerify: () => void;
